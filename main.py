@@ -9,7 +9,7 @@ except Exception as e:
 
 # --- Κυρίως πρόγραμμα ---
 import machine
-led = machine.Pin(13, machine.Pin.OUT)
+led = machine.Pin(14, machine.Pin.OUT)
 
 while True:
     led.value(1)
