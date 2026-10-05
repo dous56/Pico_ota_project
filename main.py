@@ -1,18 +1,18 @@
 import time
-time.sleep(3)  # Δίνει χρόνο στο USB/Thonny να συνδεθεί
-
-try:
-    import ota
-    ota.run_ota_check()
-except Exception as e:
-    print("OTA failed:", e)
-
-# --- Κυρίως πρόγραμμα ---
 import machine
+import ota
+
 led = machine.Pin(14, machine.Pin.OUT)
 
 while True:
+
+    # OTA service
+    # Στην πρώτη κλήση ελέγχει αμέσως.
+    # Μετά μόνο όταν περάσουν 5 ή 10 λεπτά.
+    ota.ota_service()
+
     led.value(1)
     time.sleep(1)
+
     led.value(0)
     time.sleep(1)
