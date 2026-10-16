@@ -40,6 +40,7 @@
 # 19-08-2026 7.22 Προσθήκη offset_battery στο config.ison
 # 12-10-2026 Firmware 8.1: Active-LOW relay control GPIO22/21, LoRa RELE commands
 # 12-10-2026 Firmware 8.2.0: WiFi OTA for main.py and config.json
+# 16-10-2026 διορθώσεις Lora , and blink LED , and OTA 
 # ------------------------------------------------------------
 import machine
 import micropython
@@ -235,12 +236,50 @@ LEDP = Pin(13, Pin.OUT)
 LEDP.value(0)
 Ping_Counter = 0   # μετρήτής για το πόσες φορές δέχεται Ping 
 # ============================================================
+# αναβόσβημα LEDBL
+# LED GPIO14 - Blink during IDLE
+# IDLE_LED_INTERVAL_MS = 500
+# _idle_led_last_ms = time.ticks_ms()
+# 
+# def idle_led_tick():
+#     global _idle_led_last_ms
+# 
+#     now = time.ticks_ms()
+# 
+#     if time.ticks_diff(now, _idle_led_last_ms) >= IDLE_LED_INTERVAL_MS:
+#         LEDBL.value(1 - LEDBL.value())
+#         _idle_led_last_ms = now
+# ==================================================
+# BLUE LED HEARTBEAT - GPIO14
+# Independent of blocking LoRa receive
+# ==================================================
+
+from machine import Timer
+LEDBL.value(0)
+_blue_led_timer = Timer()
+
+def blue_led_timer_callback(timer):
+    LEDBL.value(1 - LEDBL.value())
+
+def start_blue_led_heartbeat():
+    _blue_led_timer.init(
+        mode=Timer.PERIODIC,
+        period=500,
+        callback=blue_led_timer_callback
+    )
+
+def stop_blue_led_heartbeat():
+    _blue_led_timer.deinit()
+    LEDBL.value(0)
+# ------------------------------------------------------------
 # RELAY PINS
 # ============================================================
 # Active-LOW relays: 0 = ON, 1 = OFF
 # Initialize as early as possible to avoid accidental activation.
-Relay1 = Pin(22, Pin.OUT, value=1)
-Relay2 = Pin(21, Pin.OUT, value=1)
+#Relay1 = Pin(22, Pin.OUT, value=1)
+#Relay2 = Pin(21, Pin.OUT, value=1)
+Relay1 = Pin(22, Pin.OUT, value=0)
+Relay2 = Pin(21, Pin.OUT, value=0)
 print("Relay1: GPIO22 - OFF - value=1")
 print("Relay2: GPIO21 - OFF - value=1")
 # ============================================================
@@ -431,7 +470,7 @@ DEFAULT_CONFIG = {
     "CURRENT_ID": "20",
     "my_Power": 13,
     "myRotate": 0,
-    "myFreq": 868.1,
+    "myFreq": 869.5,
     "mybw": 250.0,
     "offsetBattery": 0.3,
 }
@@ -861,7 +900,6 @@ def readDHT():
         print("readDHT error:", e)
         return None, None, None
 # -19_08_2026 ------------------------------------------------
-
 # Initial readings
 Temperature1 = Humidity1 = batteryVoltage = None
 v_init = {"pv": -1.0, "charge": -1.0}
@@ -930,24 +968,45 @@ try:
     sleep_coop(2000)
 except:
     pass
-
+# ---------------------------------------------
 # ========== RELAY CONTROL FUNCTIONS ==========
+# def control_relay(relay_num, action):
+#     """Active-LOW relays: a=ON (0), k=OFF (1)."""
+#     target = Relay1 if relay_num == "1" else Relay2 if relay_num == "2" else None
+#     if target is None:
+#         return False, "INVALID_RELAY"
+#     if action == "a":
+#         target.value(0)
+#         state = "ON"
+#     elif action == "k":
+#         target.value(1)
+#         state = "OFF"
+#     else:
+#         return False, "INVALID_ACTION"
+#     print("Relay {} -> {}".format(relay_num, state))
+#     return True, state
 def control_relay(relay_num, action):
-    """Active-LOW relays: a=ON (0), k=OFF (1)."""
+    """Active-HIGH relays: a=ON (1), k=OFF (0)."""
+
     target = Relay1 if relay_num == "1" else Relay2 if relay_num == "2" else None
+
     if target is None:
         return False, "INVALID_RELAY"
+
     if action == "a":
-        target.value(0)
-        state = "ON"
-    elif action == "k":
         target.value(1)
+        state = "ON"
+
+    elif action == "k":
+        target.value(0)
         state = "OFF"
+
     else:
         return False, "INVALID_ACTION"
+
     print("Relay {} -> {}".format(relay_num, state))
     return True, state
-
+# ---------------------------------------------
 
 def handle_rele_message(message):
     """Accept RELE<ID>a1/k1/a2/k2, or RELE<ID>P<dBm>."""
@@ -959,7 +1018,7 @@ def handle_rele_message(message):
     suffix = cmd[len(CURRENT_ID):]
     if suffix.startswith("P"):
         # Retain the source protocol's power adjustment command.
-        global my_Power
+        global my_Power  
         try:
             power = int(suffix[1:])
             if not -5 <= power <= 20:
@@ -995,7 +1054,7 @@ STATE_PROCESS = 2
 STATE_SEND_PONG = 3
 STATE_READ_SENSORS = 4
 STATE_ERROR = 5
-
+start_blue_led_heartbeat()
 class ChildStateMachine:
     def __init__(self):
         self.state = STATE_IDLE
@@ -1047,9 +1106,13 @@ class ChildStateMachine:
             try:
                 wdt_mark_progress()
                 feed_if_due(500)
-                
+                   
                 # STATE: IDLE
                 if self.state == STATE_IDLE:
+                    # ΕΝΤΟΛΉ για το led που θα αναβοσβήνει
+#                     idle_led_tick()
+#                     print("IDLE LED =", LEDBL.value())
+                    # ----------------------
                     # OTA runs only during IDLE. Network requests are blocking;
                     # PING/RELE packets can be missed during a check.
                     # The service self-throttles to 10/5 minute intervals.
@@ -1057,11 +1120,17 @@ class ChildStateMachine:
                         ota.ota_service(feed_cb=wdt_mark_progress)
                     except Exception as ota_exc:
                         print("[OTA] Service error:", ota_exc)
+                    
+                    #msg, err = sx.recv(timeout_ms=100)
+                    print("ΠΡΙΝ ΤΟ LORA RECV")
                     msg, err = sx.recv(timeout_ms=100)
+                    print("ΜΕΤΑ ΤΟ LORA RECV")
+                    
                     if msg and not err:
                         self.last_any_rx_time = time.ticks_ms()
                         decoded = msg.decode("utf-8", "ignore").strip()
                         if decoded.startswith("RELE"):
+                            # πάει να ενεργοποιήσει Ρελε
                             handle_rele_message(decoded)
                             continue
                         if decoded.startswith("PING,"):
@@ -1222,5 +1291,4 @@ if __name__ == "__main__":
         flush_logs()
         time.sleep_ms(1000)
         machine.reset()
-
 
