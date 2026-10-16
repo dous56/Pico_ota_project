@@ -1122,9 +1122,9 @@ class ChildStateMachine:
                         print("[OTA] Service error:", ota_exc)
                     
                     #msg, err = sx.recv(timeout_ms=100)
-                    print("ΠΡΙΝ ΤΟ LORA RECV")
+                    #print("ΠΡΙΝ ΤΟ LORA RECV")
                     msg, err = sx.recv(timeout_ms=100)
-                    print("ΜΕΤΑ ΤΟ LORA RECV")
+                    #print("ΜΕΤΑ ΤΟ LORA RECV")
                     
                     if msg and not err:
                         self.last_any_rx_time = time.ticks_ms()
