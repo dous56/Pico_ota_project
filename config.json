@@ -1,1 +1,13 @@
-
+{
+  "CURRENT_ID": "23",
+  "my_Power": 15,
+  "myFreq": 868.0,
+  "mybw": 250.0,
+  "offsetBattery": 0.0,
+  "myRotate": 1,
+  "USE_REAL_SENSOR": true,   
+  "SWAP_CHANNELS": true,
+  "CAL_FACTOR_PV": 0.999,
+  "CAL_FACTOR_CHARGE": 0.999,
+  "_notes": ["true = πραγμ (DO_French261)", "false = εικονικός (DO_French10)", "Power σε dBm"]
+}
