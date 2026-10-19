@@ -58,6 +58,8 @@ import json
 import sys
 import framebuf
 import imgfile
+# --------------
+import network
 import ota
 # ============================================================
 # SOFTWARE WATCHDOG
@@ -151,6 +153,9 @@ def sleep_coop(total_ms):
         feed_if_due(300)
         time.sleep_ms(50)
 watchdog_start(600000)
+# ------------------------------------------------------------
+# WiFi interface - μόνο έλεγχος κατάστασης
+wlan = network.WLAN(network.STA_IF)
 # ============================================================
 # OLED
 # ============================================================
@@ -280,8 +285,8 @@ def stop_blue_led_heartbeat():
 #Relay2 = Pin(21, Pin.OUT, value=1)
 Relay1 = Pin(22, Pin.OUT, value=0)
 Relay2 = Pin(21, Pin.OUT, value=0)
-print("Relay1: GPIO22 - OFF - value=1")
-print("Relay2: GPIO21 - OFF - value=1")
+print("Relay1: GPIO22 - OFF - value=0")
+print("Relay2: GPIO21 - OFF - value=0")
 # ============================================================
 # SAFE OLED / I2C HELPERS
 # ============================================================
@@ -625,20 +630,87 @@ def _load_json_file(path, default=None):
     except Exception:
         return {} if default is None else default
 
+# def _atomic_write_json(path, obj):
+#     """Write JSON with tmp + backup + read-back validation."""
+#     tmp_path = path + ".tmp"
+#     bak_path = path + ".bak"
+#     payload = json.dumps(obj)
+# 
+#     with open(tmp_path, "w") as f:
+#         f.write(payload)
+#     try:
+#         os.sync()
+#     except Exception:
+#         pass
+# 
+#     # Validate the temporary file before touching the active config.
+#     with open(tmp_path, "r") as f:
+#         json.load(f)
+# 
+#     try:
+#         if bak_path in os.listdir():
+#             os.remove(bak_path)
+#     except Exception:
+#         pass
+# 
+#     if path in os.listdir():
+#         os.rename(path, bak_path)
+#     try:
+#         os.rename(tmp_path, path)
+#         with open(path, "r") as f:
+#             json.load(f)
+#     except Exception:
+#         try:
+#             if path in os.listdir():
+#                 os.remove(path)
+#             if bak_path in os.listdir():
+#                 os.rename(bak_path, path)
+#         except Exception:
+#             pass
+#         raise
+# 
+#     try:
+#         if bak_path in os.listdir():
+#             os.remove(bak_path)
+#     except Exception:
+#         pass
+# ---------------------------------------------
+# 19-10-2026 
 def _atomic_write_json(path, obj):
-    """Write JSON with tmp + backup + read-back validation."""
+    """Save JSON with one parameter per line, backup and validation."""
+
     tmp_path = path + ".tmp"
     bak_path = path + ".bak"
-    payload = json.dumps(obj)
+
+    # Μία παράμετρος ανά γραμμή
+    try:
+        payload = json.dumps(obj, indent=2)
+    except TypeError:
+        # Εφεδρική μορφοποίηση για παλαιότερο MicroPython
+        lines = []
+        items = list(obj.items())
+
+        for i, (key, value) in enumerate(items):
+            line = "  {}: {}".format(
+                json.dumps(key),
+                json.dumps(value)
+            )
+            if i < len(items) - 1:
+                line += ","
+            lines.append(line)
+
+        payload = "{\n" + "\n".join(lines) + "\n}"
 
     with open(tmp_path, "w") as f:
         f.write(payload)
+        f.write("\n")
+
     try:
         os.sync()
     except Exception:
         pass
 
-    # Validate the temporary file before touching the active config.
+    # Έλεγχος πριν αντικατασταθεί το αρχικό αρχείο
     with open(tmp_path, "r") as f:
         json.load(f)
 
@@ -650,14 +722,18 @@ def _atomic_write_json(path, obj):
 
     if path in os.listdir():
         os.rename(path, bak_path)
+
     try:
         os.rename(tmp_path, path)
+
         with open(path, "r") as f:
             json.load(f)
+
     except Exception:
         try:
             if path in os.listdir():
                 os.remove(path)
+
             if bak_path in os.listdir():
                 os.rename(bak_path, path)
         except Exception:
@@ -670,6 +746,7 @@ def _atomic_write_json(path, obj):
     except Exception:
         pass
 
+# ------------------------------------------------
 def save_settings():
     global settings_dirty
     try:
@@ -900,6 +977,7 @@ def readDHT():
         print("readDHT error:", e)
         return None, None, None
 # -19_08_2026 ------------------------------------------------
+
 # Initial readings
 Temperature1 = Humidity1 = batteryVoltage = None
 v_init = {"pv": -1.0, "charge": -1.0}
@@ -962,29 +1040,23 @@ try:
     
     oled.fill(0)
     oled.text("Sensor ", 0, 0)
-    oled.text("F:{:.2f} - R:{:.2f}".format(v_init.get('pv', 0), v_init.get('charge', 0)), 0, 12)
-    oled.text("DO:{:.1f}% T:{:.1f}C".format(do or 0, wt or 0), 0, 25)
+    #oled.text("F:{:.2f} - R:{:.2f}".format(v_init.get('pv', 0), v_init.get('charge', 0)), 0, 12)
+    #oled.text("DO:{:.1f}% T:{:.1f}C".format(do or 0, wt or 0), 0, 25)
+    oled.text("F:{:.2f}-DO:{:.1f}%".format(v_init.get('pv', 0), do or 0), 0, 12)
+    #oled.text("DO:{:.1f}% T:{:.1f}C".format(do or 0, wt or 0), 0, 25)
+    if wlan.isconnected():
+        oled.text("OK WiFi", 0, 25)
+    else:
+        oled.text("NO WiFi", 0, 25)
     oled.show()
     sleep_coop(2000)
-except:
-    pass
+#except:
+#    pass
+except Exception as e:
+    print("[OLED] Error:", e)
+    #
 # ---------------------------------------------
 # ========== RELAY CONTROL FUNCTIONS ==========
-# def control_relay(relay_num, action):
-#     """Active-LOW relays: a=ON (0), k=OFF (1)."""
-#     target = Relay1 if relay_num == "1" else Relay2 if relay_num == "2" else None
-#     if target is None:
-#         return False, "INVALID_RELAY"
-#     if action == "a":
-#         target.value(0)
-#         state = "ON"
-#     elif action == "k":
-#         target.value(1)
-#         state = "OFF"
-#     else:
-#         return False, "INVALID_ACTION"
-#     print("Relay {} -> {}".format(relay_num, state))
-#     return True, state
 def control_relay(relay_num, action):
     """Active-HIGH relays: a=ON (1), k=OFF (0)."""
 
@@ -1291,4 +1363,4 @@ if __name__ == "__main__":
         flush_logs()
         time.sleep_ms(1000)
         machine.reset()
-
+        
