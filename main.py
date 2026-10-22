@@ -235,9 +235,9 @@ VCONF_PATH = "register_setup_voltage.json"
 # ============================================================
 # LED PINS
 # ============================================================
-LEDBL = Pin(14, Pin.OUT)
+LEDBL = Pin(13, Pin.OUT)
 LEDBL.value(0)
-LEDP = Pin(13, Pin.OUT)
+LEDP = Pin(14, Pin.OUT)
 LEDP.value(0)
 Ping_Counter = 0   # μετρήτής για το πόσες φορές δέχεται Ping 
 # ============================================================
